@@ -37,11 +37,18 @@ resource "aws_ecr_repository" "ingestion_job" {
 }
 
 resource "docker_registry_image" "ingestion_job" {
-  name = "${local.aws_ecr_url}/${aws_ecr_repository.ingestion_job.name}:latest"
+  name = docker_image.ingestion_job_image.name
+}
 
+resource "docker_image" "ingestion_job_image" {
+  name = "${local.aws_ecr_url}/${aws_ecr_repository.ingestion_job.name}:latest"
   build {
     context    = "${path.cwd}/"
     dockerfile = "Dockerfile"
+    build_args = {
+      DOC_DIR = var.docs_dir
+      SCRIPT_NAME= var.script_name
+    }
   }
 }
 
@@ -74,7 +81,8 @@ resource "aws_ecs_task_definition" "ingestion_job" {
       "entryPoint": null,
       "portMappings":  null,
       "command": [
-        "${var.aws_docs}"
+        "${var.aws_docs}",
+        "${data.terraform_remote_state.infra.outputs.index_name}"
       ],
       "linuxParameters": null,
       "cpu": 0,
@@ -120,6 +128,7 @@ resource "null_resource" "run_ingestion_ecs_job" {
       JOB_SUBNETS        = "${jsonencode(data.terraform_remote_state.infra.outputs.private_subnets)}"
       JOB_SECURITY_GROUP = "${data.terraform_remote_state.infra.outputs.security_group_for_open_search_access}"
       AWSDOC             = "${var.aws_docs}"
+      INDEX_NAME         = "${data.terraform_remote_state.infra.outputs.index_name}"
     }
   }
   depends_on = [
